@@ -529,6 +529,13 @@ export const registerSettings = function () {
 		type: String
 	});
 
+	game.settings.register(modulename, "combat-music", {
+		scope: "world",
+		config: false,
+		default: "",
+		type: String
+	});
+
 	game.settings.register(modulename, "transfer-settings", {
 		scope: "world",
 		config: false,

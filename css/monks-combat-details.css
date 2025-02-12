@@ -18,6 +18,16 @@
     background-color: var(--color-select-option-bg);
 }
 
+.combat-music-row {
+    padding: 2px;
+}
+
+.combat-music-row select {
+    font-size: var(--font-size-14);
+    border: transparent;
+    background-color: var(--color-select-option-bg);
+}
+
 .encounter-cr-row {
     line-height: 25px;
 }

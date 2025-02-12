@@ -757,22 +757,17 @@ Hooks.on("updateCombat", async function (combat, delta) {
         await combat.setFlag("monks-combat-details", "lastPlaying", currentlyPlaying);
 
         const playlist = game.playlists.get(setting("combat-playlist"));
+        const musicId = setting("combat-music");
         if (playlist) {
-            playlist.playAll();
-        }
-    }
-
-    if (game.user.isGM && setting("show-combatant-sheet") && delta.turn != undefined) {
-        if (!combat.combatant.actor?.hasPlayerOwner) {
-            if (!MonksCombatDetails.combatantSheet || MonksCombatDetails.combatantSheet.state == -1) {
-                MonksCombatDetails.combatantSheet = combat.combatant.actor.sheet.render(true);
-            } else {
-                if (MonksCombatDetails.combatantSheet.object.id != combat.combatant.actor.id) {
-                    delete MonksCombatDetails.combatantSheet.object.apps[MonksCombatDetails.combatantSheet.appId]
-                    MonksCombatDetails.combatantSheet._state = 2;
-                    MonksCombatDetails.combatantSheet.object = combat.combatant.actor;
+            if (musicId) {
+                const sound = playlist.sounds.get(musicId);
+                if (sound) {
+                    playlist.playSound(sound);
+                    // Réinitialiser l'ID de la musique jouée
+                    await game.settings.set("monks-combat-details", "combat-music", "");
                 }
-                MonksCombatDetails.combatantSheet.render(true);
+            } else {
+                playlist.playAll();
             }
         }
     }
@@ -817,11 +812,41 @@ Hooks.on('renderCombatTracker', async (app, html, data) => {
                     .on("change", async function (event) {
                         let id = $(event.currentTarget).val();
                         await game.settings.set("monks-combat-details", "combat-playlist", id);
+                        updateMusicDropdown(id);
                     })
                 )
                 .insertAfter($('#combat .encounter-controls'));
+
+            $('<nav>')
+                .addClass('flexrow combat-music-row')
+                .append($("<select name='combatMusic'>")
+                    .append($('<option>').attr("value", "").html(""))
+                    .val(setting("combat-music"))
+                    .on("change", async function (event) {
+                        let id = $(event.currentTarget).val();
+                        await game.settings.set("monks-combat-details", "combat-music", id);
+                    })
+                )
+                .insertAfter($('#combat .combat-playlist-row'));
         }
     }
+
+    // Function to update the music dropdown based on the selected playlist
+    async function updateMusicDropdown(playlistId) {
+        let musicDropdown = $('select[name="combatMusic"]');
+        musicDropdown.empty().append($('<option>').attr("value", "").html(""));
+        if (playlistId) {
+            let playlist = game.playlists.get(playlistId);
+            if (playlist) {
+                playlist.sounds.forEach(sound => {
+                    musicDropdown.append($('<option>').attr("value", sound.id).html(sound.name));
+                });
+            }
+        }
+    }
+
+    // Initialize the music dropdown with the current playlist
+    updateMusicDropdown(setting("combat-playlist"));
 
     if (!app.popOut && game.user.isGM && data.combat && (!data.combat.started || setting('show-combat-cr-in-combat')) && setting('show-combat-cr') && MonksCombatDetails.xpchart != undefined) {
         //calculate CR
@@ -992,33 +1017,54 @@ Hooks.on("updateCombatant", async function (combatant, data, options, userId) {
 });
 
 Hooks.on("renderCombatTrackerConfig", (app, html, data) => {
+    // Playlist dropdown
     $('<div>').addClass("form-group")
         .append($('<label>').html(i18n("MonksCombatDetails.CombatPlaylist")))
         .append($('<div>').addClass("form-fields").append($('<select>').attr("name", "combatPlaylist")
             .append($('<option>').attr("value", "").html(""))
             .append(game.playlists.map((p) => {
                 return $('<option>').attr("value", p.id).html(p.name);
-            }
-            )).val(setting("combat-playlist"))))
+            }))
+            .val(setting("combat-playlist"))
+            .on("change", async function (event) {
+                let id = $(event.currentTarget).val();
+                await game.settings.set("monks-combat-details", "combat-playlist", id);
+                updateMusicDropdown(id);
+            })
+        ))
         .append($('<p>').addClass("notes").html(i18n("MonksCombatDetails.CombatPlaylistHint")))
         .insertAfter($('select[name="core.combatTheme"]', html).closest(".form-group"));
 
+    // Music dropdown
     $('<div>').addClass("form-group")
-        .append($('<label>').html(i18n("MonksCombatDetails.ShowCombatCR")))
-        .append($('<input>').attr("type", "checkbox").attr("name", "showCombatCR").attr('data-dtype', 'Boolean').prop("checked", setting("show-combat-cr-in-combat") == true && setting("show-combat-cr") == true))
-        .append($('<p>').addClass("notes").html(i18n("MonksCombatDetails.ShowCombatCRHint")))
-        .insertAfter($('input[name="skipDefeated"]', html).closest(".form-group"));
+        .append($('<label>').html(i18n("MonksCombatDetails.CombatMusic")))
+        .append($('<div>').addClass("form-fields").append($('<select>').attr("name", "combatMusic")
+            .append($('<option>').attr("value", "").html(""))
+            .val(setting("combat-music"))
+            .on("change", async function (event) {
+                let id = $(event.currentTarget).val();
+                await game.settings.set("monks-combat-details", "combat-music", id);
+            })
+        ))
+        .append($('<p>').addClass("notes").html(i18n("MonksCombatDetails.CombatMusicHint")))
+        .insertAfter($('select[name="combatPlaylist"]', html).closest(".form-group"));
 
-    $('<div>').addClass("form-group")
-        .append($('<label>').html(i18n("MonksCombatDetails.HideDefeated")))
-        .append($('<input>').attr("type", "checkbox").attr("name", "hideDefeated").attr('data-dtype', 'Boolean').prop("checked", setting("hide-defeated") == true))
-        .append($('<p>').addClass("notes").html(i18n("MonksCombatDetails.HideDefeatedHint")))
-        .insertAfter($('input[name="skipDefeated"]', html).closest(".form-group"));
+    // Function to update the music dropdown based on the selected playlist
+    async function updateMusicDropdown(playlistId) {
+        let musicDropdown = $('select[name="combatMusic"]');
+        musicDropdown.empty().append($('<option>').attr("value", "").html(""));
+        if (playlistId) {
+            let playlist = game.playlists.get(playlistId);
+            if (playlist) {
+                playlist.sounds.forEach(sound => {
+                    musicDropdown.append($('<option>').attr("value", sound.id).html(sound.name));
+                });
+            }
+        }
+    }
 
-    $("<div>").addClass("form-group")
-        .append($('<label>').html(i18n("MonksCombatDetails.RerollInitiative")))
-        .append($('<input>').attr("type", "checkbox").attr("name", "rerollInitiative").attr('data-dtype', 'Boolean').prop("checked", setting("reroll-initiative") == true))
-        .insertBefore($('input[name="skipDefeated"]', html).closest(".form-group"));
+    // Initialize the music dropdown with the current playlist
+    updateMusicDropdown(setting("combat-playlist"));
 
     app.setPosition({ height: 'auto' });
 });
