@@ -400,7 +400,7 @@ export class CombatTurn {
             const audiofile = audiofiles[Math.floor(Math.random() * audiofiles.length)];
 
             let volume = (setting('volume') / 100) * getVolume();
-            foundry.audio.AudioHelper.play({ src: audiofile, volume: volume }).then((sound) => {
+            foundry.audio.AudioHelper.play({ src: audiofile, channel: "interface", volume: volume }).then((sound) => {
                 combat.turnsound = sound;
                 combat.turnsound.addEventListener("stop", () => {
                     delete combat.turnsound;

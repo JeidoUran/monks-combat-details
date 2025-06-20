@@ -118,6 +118,8 @@
 	"MonksCombatDetails.RerollInitiative": "Reroll Initiative",
 	"MonksCombatDetails.CombatPlaylist": "Combat Playlist",
 	"MonksCombatDetails.CombatPlaylistHint": "Select a playlist to play when combat starts.  Any currently playing tracks will be paused during combat and will resume once the combat has ended",
+  "MonksCombatDetails.CombatMusic": "Combat Music",
+	"MonksCombatDetails.CombatMusicHint": "Select a specific music from the selected playlist to play when combat starts.  Any currently playing tracks will be paused during combat and will resume once the combat has ended",
 	"MonksCombatDetails.ShowCombatCR": "Show Encounter CR",
 	"MonksCombatDetails.ShowCombatCRHint": "Show the estimated CR of the encounter in the combat tracker",
 
