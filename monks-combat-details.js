@@ -176,9 +176,9 @@ export class MonksCombatDetails {
 						let lastPlaying = game.combats.active?.getFlag("monks-combat-details", "lastPlaying");
 						if (lastPlaying) {
 							for (let playing of lastPlaying) {
-								let playlist = await fromUuid(playing);
-								if (playlist)
-									playlist.playAll();
+								let sound = await fromUuid(playing);
+								if (sound)
+									sound.parent?.playSound(sound);
 							}
 						}
 					}
@@ -206,7 +206,9 @@ export class MonksCombatDetails {
 		patchFunc("Combat.prototype.startCombat", async function (wrapped, ...args) {
 			if (setting("prevent-initiative") && this.turns.find(c => c.initiative == undefined) != undefined) {
 				return await foundry.applications.api.DialogV2.confirm({
-					title: i18n("MonksCombatDetails.NotAllInitTitle"),
+					window: {
+						title: i18n("MonksCombatDetails.NotAllInitTitle")
+					},
 					content: i18n("MonksCombatDetails.NotAllInitContent"),
 					yes: {
 						callback: async () => {
@@ -291,7 +293,8 @@ export class MonksCombatDetails {
 
 		patchFunc("CONFIG.Combat.documentClass.prototype._sortCombatants", function (wrapped, ...args) {
 			let combatants = args;
-			if (combatants.length && setting("order-initiative") && !combatants[0].combat.started) {
+			let combat = game.combats.active;
+			if (combatants.length && setting("order-initiative") && !combat?.started) {
 				if (!game.user.isGM) {
 					let [a, b] = args;
 					let aTopOrder = !a.initiative && a.isOwner;
@@ -317,13 +320,6 @@ export class MonksCombatDetails {
 	static async ready() {
 		game.socket.on(MonksCombatDetails.SOCKET, MonksCombatDetails.onMessage);
 
-		if (!setting("transfer-settings") && game.user.isGM && game.modules.get("monks-little-details")?.active) {
-			MonksCombatDetails.transferSettings();
-		}
-		if (!setting("transfer-settings-client") && game.modules.get("monks-little-details")?.active) {
-			MonksCombatDetails.transferSettingsClient();
-		}
-
 		document.querySelector(':root').style.setProperty("--MonksCombatDetails-large-print-size", setting("large-print-size") + "px");
 
 		CombatTurn.ready();
@@ -337,90 +333,6 @@ export class MonksCombatDetails {
 
 	static isDefeated(token) {
 		return (token && (token.combatant && token.combatant?.defeated) || !!token.actor?.statuses.has(CONFIG.specialStatusEffects.DEFEATED));
-	}
-
-	static async transferSettings() {
-		let swapFilename = function (value, name) {
-			if (value && (name === "next-sound" || name === "turn-sound" || name === "round-sound")) {
-				value = value.replace("monks-little-details", "monks-combat-details");
-			}
-
-			return value;
-		}
-		let setSetting = async function (name) {
-			let oldChange = game.settings.settings.get(`monks-combat-details.${name}`).onChange;
-			game.settings.settings.get(`monks-combat-details.${name}`).onChange = null;
-			let value = swapFilename(game.settings.get("monks-little-details", name), name);
-			await game.settings.set("monks-combat-details", name, value);
-			game.settings.settings.get(`monks-combat-details.${name}`).onChange = oldChange;
-		}
-
-		await setSetting("show-combat-cr");
-		await setSetting("switch-combat-tab");
-		await setSetting("hide-enemies");
-		await setSetting("hide-until-turn");
-		await setSetting("prevent-initiative");
-		await setSetting("opencombat");
-		await setSetting("close-combat-when-done");
-		await setSetting("prevent-token-removal");
-		await setSetting("prevent-combat-spells");
-		await setSetting("auto-defeated");
-		await setSetting("invisible-dead");
-		await setSetting("auto-reveal");
-		await setSetting("auto-scroll");
-		await setSetting("add-combat-bars");
-		await setSetting("combat-bar-opacity");
-		await setSetting("next-sound");
-		await setSetting("turn-sound");
-		await setSetting("round-sound");
-		await setSetting("round-chatmessages");
-		await setSetting("show-start");
-		await setSetting("hide-defeated");
-
-		for (let scene of game.scenes) {
-			for (let token of scene.tokens) {
-				if (foundry.utils.getProperty(token, "flags.monks-little-details.displayBarsCombat")) {
-					await token.update({ "flags.monks-combat-details.displayBarsCombat": foundry.utils.getProperty(token, "flags.monks-little-details.displayBarsCombat") });
-				}
-			}
-		}
-
-		for (let actor of game.actors) {
-			if (foundry.utils.getProperty(actor.prototypeToken, "flags.monks-little-details.displayBarsCombat")) {
-				await actor.prototypeToken.update({ "flags.monks-combat-details.displayBarsCombat": foundry.utils.getProperty(actor.prototypeToken, "flags.monks-little-details.displayBarsCombat") });
-			}
-		}
-
-		ui.notifications.warn("Monk's Combat Details has transfered over settings from Monk's Little Details, you will need to refresh your browser for some settings to take effect.", { permanent: true });
-
-		await game.settings.set("monks-combat-details", "transfer-settings", true);
-	}
-
-	static async transferSettingsClient() {
-		let setSetting = async function (name) {
-			let oldChange = game.settings.settings.get(`monks-combat-details.${name}`).onChange;
-			game.settings.settings.get(`monks-combat-details.${name}`).onChange = null;
-			await game.settings.set("monks-combat-details", name, game.settings.get("monks-little-details", name));
-			game.settings.settings.get(`monks-combat-details.${name}`).onChange = oldChange;
-		}
-
-		await setSetting("popout-combat");
-		await setSetting("combat-position");
-		await setSetting("shownextup");
-		await setSetting("showcurrentup");
-		await setSetting("large-print");
-		await setSetting("play-next-sound");
-		await setSetting("play-turn-sound");
-		await setSetting("play-round-sound");
-		await setSetting("volume");
-		await setSetting("clear-targets");
-		await setSetting("remember-previous");
-		await setSetting("pan-to-combatant");
-		await setSetting("select-combatant");
-
-		ui.notifications.warn("Monk's Combat Details has transfered over your personal settings from Monk's Little Details, you will need to refresh your browser for some settings to take effect.", { permanent: true });
-
-		await game.settings.set("monks-combat-details", "transfer-settings-client", true);
 	}
 
 	static repositionCombat(app) {
@@ -441,8 +353,8 @@ export class MonksCombatDetails {
 			top = position.top;
 		}
 
-		app.position.left = left;
-		app.position.top = top;
+		app.position.left = left == 0 || left == null ? 0.01 : left;
+		app.position.top = top == 0 || top == null ? 0.01 : top;
 
 		$(app.element).css({ top: app.position.top, left: app.position.left });
 
@@ -453,10 +365,12 @@ export class MonksCombatDetails {
 	}
 
 	static combatNotify() {
-		let icon = $('#sidebar .tabs [data-tab="combat"] + .notification-pip').addClass("active");
-		setTimeout(() => {
-			icon.removeClass("active");
-		}, foundry.applications.sidebar.tabs.ChatLog.PIP_DURATION);
+		if (ui.sidebar.tabGroups.primary != "combat") {
+			let icon = $('#sidebar .tabs [data-tab="combat"] + .notification-pip').addClass("active");
+			setTimeout(() => {
+				icon.removeClass("active");
+			}, foundry.applications.sidebar.tabs.ChatLog.PIP_DURATION);
+		}
 	}
 
 	static getCRText (cr) {
@@ -685,9 +599,9 @@ Hooks.on("deleteCombat", async function (combat) {
 		let lastPlaying = combat.getFlag("monks-combat-details", "lastPlaying");
 		if (lastPlaying) {
 			for (let playing of lastPlaying) {
-				let playlist = await fromUuid(playing);
-				if (playlist)
-					playlist.playAll();
+				let sound = await fromUuid(playing);
+				if (sound)
+					sound.parent?.playSound(sound);
 			}
 		}
 
@@ -752,13 +666,10 @@ Hooks.on("updateCombat", async function (combat, delta) {
 			await game.settings.set("monks-combat-details", "combat-playlist", id);
 		}
 
-		let currentlyPlaying = ui.playlists._playing.playlists.map(ps => ps.playing ? ps.uuid : null).filter(p => !!p);
+		let currentlyPlaying = ui.playlists._playing.sounds.map(ps => ps.uuid).filter(p => !!p);
 		for (let playing of currentlyPlaying) {
-			let playlist = await fromUuid(playing);
-			playlist.update({ playing: false });
-			for (let sound of playlist.sounds) {
-				sound.update({ playing: false, pausedTime: sound.sound.currentTime });
-			}
+			let sound = await fromUuid(playing);
+			sound.update({ playing: false, pausedTime: sound.sound.currentTime });
 		}
 		await combat.setFlag("monks-combat-details", "lastPlaying", currentlyPlaying);
 
@@ -904,6 +815,23 @@ Hooks.on('renderCombatTracker', async (app, html, data) => {
 			$(el).attr("data-tooltip", i18n(effect.label));
 		}
 	});
+
+	if (game.user.isGM && data.combat.started) {
+		let endCombatBtn = $("button[data-action='endCombat']", html);
+		let nextTurnBtn = endCombatBtn.prev("button[data-action='nextTurn']", html);
+		let countEnemies = data.combat.combatants.filter(c => c.hasPlayerOwner == false && !MonksCombatDetails.isDefeated(c.token)).length;
+		if (nextTurnBtn.length == 0) {
+			nextTurnBtn = $('<button>').attr('type', 'button').attr("data-action", "nextTurn").addClass("combat-control combat-control-lg")
+				.append($('<i>').addClass("fa-solid fa-check"))
+				.append($('<span>').html("End Turn"))
+				.insertBefore(endCombatBtn);
+		}
+
+		if (countEnemies == 0)
+			nextTurnBtn.addClass("icon fa-solid fa-check notransition").removeClass("combat-control-lg").attr("data-tooltip", $("span", nextTurnBtn).html()).html("");
+		else
+			endCombatBtn.addClass("icon fa-solid fa-xmark notransition").removeClass("combat-control-lg").attr("data-tooltip", $("span", endCombatBtn).html()).html("");
+	}
 });
 
 Hooks.on("renderSettingsConfig", (app, html, data) => {
